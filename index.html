@@ -48,17 +48,17 @@ try {
 /* 레이아웃: 대문(소개+랭킹) → 계약서 카드 한 장씩 → 결과 */
 :root {
   --bg: #eef1ec; --card: #ffffff; --ink: #1b2430; --muted: #5d6874; --line: #d5dbd3;
-  --accent: #b3122e; --good: #1d7a46; --warn: #a86a00; --tint: #f6e7e9;
+  --accent: #b3122e; --good: #1d7a46; --fair: #1f5fbf; --warn: #c2410c; --tint: #f6e7e9;
   --display: "Black Han Sans", "Noto Sans KR", sans-serif;
   --body: "Noto Sans KR", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #141a17; --card: #1d2420; --ink: #e8ece6; --muted: #9aa59d; --line: #2f3833;
-  --accent: #ff5a6e; --good: #5fd08f; --warn: #f0b450; --tint: #3a2227; color-scheme: dark } }
+  --accent: #ff5a6e; --good: #5fd08f; --fair: #6aa8ff; --warn: #ff9b50; --tint: #3a2227; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #141a17; --card: #1d2420; --ink: #e8ece6; --muted: #9aa59d; --line: #2f3833;
-  --accent: #ff5a6e; --good: #5fd08f; --warn: #f0b450; --tint: #3a2227; color-scheme: dark }
+  --accent: #ff5a6e; --good: #5fd08f; --fair: #6aa8ff; --warn: #ff9b50; --tint: #3a2227; color-scheme: dark }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; }
 .wrap { max-width: 560px; margin: 0 auto; padding-block: 28px 48px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -125,17 +125,21 @@ form { display: flex; gap: 8px; }
 .answer span { font-family: var(--mono); font-size: 13px; color: var(--muted); }
 .verdict { font-weight: 700; }
 .src { font-size: 12px; color: var(--muted); justify-self: start; }
-.verdict.good { color: var(--good); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--accent); }
+.verdict.good { color: var(--good); } .verdict.fair { color: var(--fair); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--accent); }
 
 /* 결과 */
 .final { text-align: left; }
 .final .big { font-family: var(--display); font-size: 64px; line-height: 1; }
 .final .big small { font-size: 22px; color: var(--muted); }
-.recap { list-style: none; margin: 0; padding: 0; display: grid; }
-.recap li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
-.recap li:last-child { border-bottom: 0; }
-.recap .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
-.recap .num b { color: var(--ink); }
+.recap thead th:first-child { text-align: left; padding-left: 0; }
+.recap tbody th { text-align: left; padding: 12px 8px 12px 0; border-bottom: 1px dashed var(--line); font-size: 15px; font-weight: 700; color: var(--ink); white-space: normal; }
+.recap tbody tr:last-child > * { border-bottom: 0; }
+.recap .q { margin-right: 8px; font-family: var(--mono); font-size: 12px; color: var(--accent); }
+.recap tbody th small { margin-left: 6px; font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--muted); }
+.recap td { color: var(--muted); }
+.recap td:nth-of-type(1) { color: var(--ink); font-weight: 600; }
+.recap .pts { font-weight: 700; }
+.recap .pts.good { color: var(--good); } .recap .pts.fair { color: var(--fair); } .recap .pts.warn { color: var(--warn); } .recap .pts.bad { color: var(--accent); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .start-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .hero .start-actions button { justify-self: stretch; min-width: 0; width: 100%; }
@@ -144,21 +148,10 @@ form { display: flex; gap: 8px; }
 .game-controls button { min-height: 40px; font-size: 14px; padding: 0 12px; }
 .mode-badge { color: var(--accent); font-size: 14px; font-weight: 700; }
 .notice { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
-.recap li { display: block; padding: 0; }
-.recap summary { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; list-style: none; }
-.recap summary::-webkit-details-marker { display: none; }
-.recap summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.recap-name { min-width: 0; overflow-wrap: anywhere; }
-.recap-name::before { content: '+'; display: inline-block; margin-right: 6px; color: var(--muted); font-family: var(--mono); }
-.recap details[open] .recap-name::before { content: '−'; }
-.recap-detail { padding: 0 0 16px 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.65; }
-.recap-detail p { margin: 0; }
-.recap-detail a { color: var(--muted); justify-self: start; }
 .result-filter { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .result-filter input { width: 18px; height: 18px; accent-color: var(--accent); }
 .share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .share-actions button { flex: 1; min-width: 130px; }
-#shareText { width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--bg); font: inherit; font-size: 14px; }
 .rank-dialog {
   width: min(560px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
@@ -221,7 +214,6 @@ h2 { font-size: 24px; }
 table { font-size: 16px; }
 .answer strong { font-size: 42px; }
 .answer span { font-size: 15px; }
-.recap li { font-size: 16px; }
 .final .big { font-size: 80px; }
 @media (min-width: 640px) {
   section { gap: 24px; }
@@ -240,7 +232,6 @@ table { font-size: 16px; }
 #nickname { font-family: var(--body); font-size: 16px; }
 .field input:disabled { opacity: .7; }
 a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.recap li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 420px) {
   .card { padding: 16px; }
   .rank-dialog { padding: 16px; }
@@ -248,15 +239,13 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   table { font-size: 14px; }
   .year { font-size: 13px; }
   .name { font-size: 36px; }
-  .recap li { gap: 8px; font-size: 14px; }
+  .recap tbody th { font-size: 14px; }
   .ticket div { padding: 10px; }
 }
 @media (max-width: 360px) {
   .topbar { gap: 6px; flex-wrap: wrap; }
   .who-row { gap: 8px; flex-wrap: wrap; }
   .terms b { font-size: 14px; }
-  .recap li { grid-template-columns: 1fr auto; }
-  .recap li > span:first-child { grid-column: 1 / -1; }
 }
 </style>
 </head>
@@ -307,9 +296,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
       <div class="topbar"><h2>랭킹 TOP 10</h2><span class="meta" id="rankMeta">오늘 최고 점수</span></div>
       <div class="rank-tabs" role="tablist" aria-label="대문 랭킹 기간">
         <button type="button" id="homeDailyTab" role="tab" data-rank-period="daily" aria-selected="true" aria-controls="homeRankPanel">일일 랭킹</button>
-        <button type="button" id="homeAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="homeRankPanel" tabindex="-1">전체 랭킹</button>
-        <button type="button" id="homeLegacyTab" role="tab" data-rank-period="legacy" aria-selected="false" aria-controls="homeRankPanel" tabindex="-1">이전 기록</button>
-      </div>
+        <button type="button" id="homeAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="homeRankPanel" tabindex="-1">전체 랭킹</button>      </div>
       <p class="note" id="rankPeriodNote">오늘 · 한국 시간 자정 기준</p>
       <div class="rank-panel" id="homeRankPanel" role="tabpanel" aria-labelledby="homeDailyTab" tabindex="0">
         <ol class="rank" id="rank" aria-label="일일 랭킹 TOP 10"></ol>
@@ -329,13 +316,11 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     <div class="card final">
       <p class="eyebrow" id="resultMode">GAME SET</p>
       <div class="big"><span id="finalScore">0</span><small> / 1000점</small></div>
-            <p class="note">내 답 / 정답 · 단위: 억 원</p>
       <label class="result-filter"><input type="checkbox" id="onlyWrong">100점 미만만 보기</label>
-      <ol class="recap" id="recap"></ol>
+      <div class="tbl"><table class="recap" aria-label="문제별 결과"><thead><tr><th scope="col">문제</th><th scope="col">실제 금액</th><th scope="col">내 답</th><th scope="col">점수</th></tr></thead><tbody id="recap"></tbody></table></div>
       <p class="note" id="recapEmpty" hidden>모든 문제에서 100점을 받았습니다.</p>
-      <div class="share-actions"><button type="button" id="shareBtn">결과 공유</button><button type="button" class="ghost" id="copyBtn">결과 복사</button></div>
+      <div class="share-actions"><button type="button" id="shareBtn">결과 공유</button></div>
       <p class="note" id="shareMsg" role="status" hidden></p>
-      <textarea id="shareText" aria-label="복사할 결과" readonly hidden></textarea>
       <p class="notice" id="practiceNote" hidden>자유 연습 기록은 랭킹에 등록되지 않습니다. 오늘의 도전에서 랭킹에 도전해 보세요.</p>
       <div class="register" id="registerCard">
         <label for="nickname">랭킹에 이름 남기기 <span class="note">1–12자</span></label>
@@ -376,9 +361,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     </div>
     <div class="rank-tabs" role="tablist" aria-label="모달 랭킹 기간">
       <button type="button" id="modalDailyTab" role="tab" data-rank-period="daily" aria-selected="true" aria-controls="modalRankPanel">일일 랭킹</button>
-      <button type="button" id="modalAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="modalRankPanel" tabindex="-1">전체 랭킹</button>
-      <button type="button" id="modalLegacyTab" role="tab" data-rank-period="legacy" aria-selected="false" aria-controls="modalRankPanel" tabindex="-1">이전 기록</button>
-    </div>
+      <button type="button" id="modalAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="modalRankPanel" tabindex="-1">전체 랭킹</button>    </div>
     <p class="note" id="modalRankPeriodNote">오늘 · 한국 시간 자정 기준</p>
     <div class="rank-panel" id="modalRankPanel" role="tabpanel" aria-labelledby="modalDailyTab" tabindex="0">
       <ol class="rank" id="modalRank" aria-label="일일 랭킹 1위부터 10위"></ol>
@@ -587,7 +570,8 @@ function reveal() {
   const points = score(guess, player.amount);
   total += points;
   log.push({ player, guess, points });
-  const [cls, message] = points >= 95 ? ['good', '정확합니다!'] : points >= 80 ? ['warn', '근접했습니다.'] : ['bad', '차이가 큽니다.'];
+  const cls = grade(points);
+  const message = GRADE_MESSAGES[cls];
   $('guessForm').hidden = true;
   const last = idx === deck.length - 1;
   $('out').innerHTML = `
@@ -608,10 +592,47 @@ function reveal() {
   $('next').focus({ preventScroll: true });
 }
 
+const GRADE_MESSAGES = { good: '정확합니다!', fair: '근접했습니다.', warn: '차이가 있습니다.', bad: '차이가 큽니다.' };
+const GRADE_SQUARES = { good: '🟩', fair: '🟦', warn: '🟧', bad: '🟥' };
+const grade = points => points >= 90 ? 'good' : points >= 60 ? 'fair' : points >= 30 ? 'warn' : 'bad';
+
+async function shareResult() {
+  const url = 'https://kbo-fa-quiz.vercel.app/';
+  const text = `FA 몸값 퀴즈 ${total} / 1000점\n${log.map(({ points }) => GRADE_SQUARES[grade(points)]).join('')}`;
+  $('shareMsg').hidden = false;
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'FA 몸값 퀴즈', text, url });
+      $('shareMsg').hidden = true;
+      return;
+    }
+    await navigator.clipboard.writeText(`${text}\n${url}`);
+    $('shareMsg').textContent = '결과를 클립보드에 복사했습니다.';
+  } catch (error) {
+    // 사용자가 공유 시트를 닫은 경우는 실패로 안내하지 않습니다.
+    if (error.name === 'AbortError') { $('shareMsg').hidden = true; return; }
+    $('shareMsg').textContent = '공유하지 못했습니다. 화면을 캡처해 공유해 주세요.';
+  }
+}
+$('shareBtn').addEventListener('click', shareResult);
+
+function applyRecapFilter() {
+  const onlyMissed = $('onlyWrong').checked;
+  let visible = 0;
+  for (const row of $('recap').rows) {
+    row.hidden = onlyMissed && Number(row.dataset.points) >= 100;
+    if (!row.hidden) visible++;
+  }
+  $('recapEmpty').hidden = visible > 0;
+}
+$('onlyWrong').addEventListener('change', applyRecapFilter);
+
 function finish() {
   $('finalScore').textContent = total;
-  $('recap').innerHTML = log.map(({ player, guess, points }) =>
-    `<li><span>${esc(player.name)} <span class="num">${esc(player.year)}</span></span><span class="num">${guess} / <b>${player.amount}</b>억</span><span class="num"><b>${points}</b>점</span></li>`).join('');
+  $('recap').innerHTML = log.map(({ player, guess, points }, i) =>
+    `<tr data-points="${points}"><th scope="row"><span class="q">Q${i + 1}</span>${esc(player.name)}<small>${esc(player.year)}</small></th><td>${player.amount}억</td><td>${guess}억</td><td class="pts ${grade(points)}">${points}</td></tr>`).join('');
+  applyRecapFilter();
+  $('shareMsg').hidden = true;
   $('nickname').value = rememberedNickname;
   $('nickname').disabled = false;
   $('nickname').setCustomValidity('');
