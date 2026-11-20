@@ -2,6 +2,8 @@
 
 빌드 없이 실행하는 정적 웹 게임입니다. 문제는 `players.json`을 그대로 읽고, 랭킹만 Supabase에 저장합니다.
 
+공개 주소: [FA 몸값 퀴즈](https://kbo-fa-quiz.vercel.app/). 개인 GitHub 저장소의 `main` 변경 사항이 Vercel로 자동 배포됩니다.
+
 ## 1. Supabase 프로젝트 만들기
 
 1. [Supabase 대시보드](https://supabase.com/dashboard)에 로그인합니다.
@@ -75,3 +77,15 @@ python3 -m http.server 8000 --bind 127.0.0.1
 랭킹은 닉네임별 최고점 TOP 10입니다. 닉네임은 브라우저 `localStorage`에 기억하므로 브라우저나 기기를 바꾸면 다시 입력해야 합니다. Supabase 설정이 없거나 연결에 실패해도 문제 데이터가 로드되면 게임을 플레이할 수 있습니다.
 
 이 구조는 로그인 없이 브라우저에서 점수를 등록합니다. RLS와 범위 제약은 적용하지만 점수의 실제 플레이 여부를 서버에서 검증하지 않으며, 같은 닉네임을 다른 사람이 사용할 수도 있습니다. 상금이 걸린 대회처럼 점수와 사용자 신원을 검증해야 하는 운영에는 서버 채점과 인증을 추가해야 합니다.
+
+## Google 검색 등록
+
+검색용 제목·설명, 대표 주소(canonical), WebSite 구조화 데이터, `robots.txt`와 `sitemap.xml`이 포함되어 있습니다. 대표 주소는 Vercel 주소로 통일합니다.
+
+1. [Google Search Console](https://search.google.com/search-console/welcome)에 개인 Google 계정으로 로그인합니다.
+2. **URL 접두어** 속성에 `https://kbo-fa-quiz.vercel.app/`를 등록합니다. Vercel의 공유 도메인이므로 도메인 DNS 인증 대신 URL 접두어를 사용합니다.
+3. **HTML 태그** 방식에서 발급한 `google-site-verification` 메타 태그를 `index.html`의 `<head>`에 추가하고 배포한 뒤 소유권을 확인합니다. 태그는 이후에도 유지합니다.
+4. **Sitemaps**에서 `https://kbo-fa-quiz.vercel.app/sitemap.xml`을 제출합니다.
+5. **URL 검사**에 대표 주소를 입력하고 **실제 URL 테스트 → 색인 생성 요청**을 진행합니다.
+
+수집·색인에는 며칠에서 몇 주가 걸릴 수 있고, 검색 결과 노출이나 순위는 보장되지 않습니다. 같은 URL을 반복 요청해도 더 빨리 처리되지 않습니다. [Google 공식 안내](https://developers.google.com/search/docs/crawling-indexing/ask-google-to-recrawl)
