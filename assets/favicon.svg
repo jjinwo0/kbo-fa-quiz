@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="FA 몸값 퀴즈">
+  <rect width="64" height="64" rx="14" fill="#b3122e"/>
+  <path d="M12 18h18v6H18v7h10v6H18v11h-6z" fill="#fff"/>
+  <path d="M41 18h7l11 30h-7l-2-6H39l-2 6h-7zm.1 18h6.8l-3.4-10z" fill="#fff" fill-rule="evenodd"/>
+</svg>

@@ -14,6 +14,12 @@
 <meta property="og:title" content="FA 몸값 퀴즈 | KBO FA 계약 총액 맞히기">
 <meta property="og:description" content="성적과 계약 기간만 보고 KBO FA 계약 총액을 맞혀 보세요. 한 판 10명, 최대 1000점! TOP 10 랭킹에 도전하세요.">
 <meta property="og:url" content="https://kbo-fa-quiz.vercel.app/">
+<meta property="og:image" content="https://kbo-fa-quiz.vercel.app/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="FA 몸값 퀴즈 — KBO FA 계약 총액 맞히기">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -131,6 +137,28 @@ form { display: flex; gap: 8px; }
 .recap .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
 .recap .num b { color: var(--ink); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.start-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hero .start-actions button { justify-self: stretch; min-width: 0; width: 100%; }
+.resume-card { gap: 10px; }
+.game-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.game-controls button { min-height: 40px; font-size: 14px; padding: 0 12px; }
+.mode-badge { color: var(--accent); font-size: 14px; font-weight: 700; }
+.notice { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+.recap li { display: block; padding: 0; }
+.recap summary { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; list-style: none; }
+.recap summary::-webkit-details-marker { display: none; }
+.recap summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.recap-name { min-width: 0; overflow-wrap: anywhere; }
+.recap-name::before { content: '+'; display: inline-block; margin-right: 6px; color: var(--muted); font-family: var(--mono); }
+.recap details[open] .recap-name::before { content: '−'; }
+.recap-detail { padding: 0 0 16px 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.65; }
+.recap-detail p { margin: 0; }
+.recap-detail a { color: var(--muted); justify-self: start; }
+.result-filter { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.result-filter input { width: 18px; height: 18px; accent-color: var(--accent); }
+.share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.share-actions button { flex: 1; min-width: 130px; }
+#shareText { width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--bg); font: inherit; font-size: 14px; }
 .rank-dialog {
   width: min(560px, calc(100% - 32px));
   max-height: calc(100vh - 48px);
@@ -257,16 +285,30 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
         <div><small>문제당 최대</small><b>100점</b></div>
         <div><small>출제 풀</small><b id="poolSize">82명</b></div>
       </div>
-      <button id="startBtn" disabled>시작하기</button>
+      <div class="start-actions">
+        <button id="dailyBtn" disabled>오늘의 도전</button>
+        <button id="startBtn" class="ghost" disabled>자유 연습</button>
+      </div>
+      <p class="notice">오늘의 도전은 모두 같은 10문제입니다. 이 브라우저 계정의 첫 도전만 랭킹에 반영되며, 한국 시간 자정에 마감됩니다.</p>
+      <p class="note" id="startNote" role="status" hidden></p>
       <p class="note" id="dataNote" role="status">문제를 불러오는 중입니다.</p>
       <button id="retryDataBtn" class="ghost" hidden>다시 불러오기</button>
       <p class="note">총액(보장+옵션, 억 원)을 맞힙니다. 문제당 점수는 100 − 오차율(%)이고, 최소 0점입니다.</p>
+    </div>
+    <div class="card resume-card" id="resumeCard" hidden>
+      <h2>최근 플레이</h2>
+      <p class="note" id="resumeNote"></p>
+      <div class="actions">
+        <button type="button" id="resumeBtn">이어하기</button>
+        <button type="button" id="lastResultBtn" class="ghost">마지막 결과 보기</button>
+      </div>
     </div>
     <div class="card">
       <div class="topbar"><h2>랭킹 TOP 10</h2><span class="meta" id="rankMeta">오늘 최고 점수</span></div>
       <div class="rank-tabs" role="tablist" aria-label="대문 랭킹 기간">
         <button type="button" id="homeDailyTab" role="tab" data-rank-period="daily" aria-selected="true" aria-controls="homeRankPanel">일일 랭킹</button>
         <button type="button" id="homeAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="homeRankPanel" tabindex="-1">전체 랭킹</button>
+        <button type="button" id="homeLegacyTab" role="tab" data-rank-period="legacy" aria-selected="false" aria-controls="homeRankPanel" tabindex="-1">이전 기록</button>
       </div>
       <p class="note" id="rankPeriodNote">오늘 · 한국 시간 자정 기준</p>
       <div class="rank-panel" id="homeRankPanel" role="tabpanel" aria-labelledby="homeDailyTab" tabindex="0">
@@ -278,25 +320,34 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
   <section id="game" hidden>
     <div class="topbar"><h1>FA 몸값 <span>퀴즈</span></h1><div class="meta" id="meta" aria-live="polite"></div></div>
+    <div class="game-controls"><span class="mode-badge" id="gameMode"></span><button type="button" class="ghost" id="pauseBtn">저장하고 홈으로</button></div>
+    <p class="note" id="gameNote" role="status" hidden></p>
     <main class="card" id="card"></main>
   </section>
 
   <section id="done" hidden>
     <div class="card final">
-      <p class="eyebrow">GAME SET</p>
+      <p class="eyebrow" id="resultMode">GAME SET</p>
       <div class="big"><span id="finalScore">0</span><small> / 1000점</small></div>
             <p class="note">내 답 / 정답 · 단위: 억 원</p>
+      <label class="result-filter"><input type="checkbox" id="onlyWrong">100점 미만만 보기</label>
       <ol class="recap" id="recap"></ol>
-      <div class="register">
+      <p class="note" id="recapEmpty" hidden>모든 문제에서 100점을 받았습니다.</p>
+      <div class="share-actions"><button type="button" id="shareBtn">결과 공유</button><button type="button" class="ghost" id="copyBtn">결과 복사</button></div>
+      <p class="note" id="shareMsg" role="status" hidden></p>
+      <textarea id="shareText" aria-label="복사할 결과" readonly hidden></textarea>
+      <p class="notice" id="practiceNote" hidden>자유 연습 기록은 랭킹에 등록되지 않습니다. 오늘의 도전에서 랭킹에 도전해 보세요.</p>
+      <div class="register" id="registerCard">
         <label for="nickname">랭킹에 이름 남기기 <span class="note">1–12자</span></label>
         <form id="scoreForm">
           <label class="field"><input id="nickname" name="nickname" type="text" autocomplete="nickname" maxlength="24" placeholder="닉네임" aria-label="닉네임 1–12자" required></label>
           <button id="saveBtn" type="submit">랭킹 등록</button>
         </form>
         <p id="saveMsg" class="note" role="status" aria-live="polite"></p>
+        <p class="note">최초 등록한 닉네임은 이 브라우저 계정에 연결됩니다. 브라우저 데이터를 지우거나 기기를 바꾸면 같은 계정으로 복구할 수 없습니다.</p>
       </div>
       <div class="actions">
-        <button id="againBtn">다시 하기</button>
+        <button id="againBtn">자유 연습</button>
         <button id="homeBtn" class="ghost">홈으로</button>
         <button id="rankBtn" class="ghost" aria-haspopup="dialog" aria-controls="rankDialog">랭킹 보기</button>
       </div>
@@ -326,6 +377,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     <div class="rank-tabs" role="tablist" aria-label="모달 랭킹 기간">
       <button type="button" id="modalDailyTab" role="tab" data-rank-period="daily" aria-selected="true" aria-controls="modalRankPanel">일일 랭킹</button>
       <button type="button" id="modalAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="modalRankPanel" tabindex="-1">전체 랭킹</button>
+      <button type="button" id="modalLegacyTab" role="tab" data-rank-period="legacy" aria-selected="false" aria-controls="modalRankPanel" tabindex="-1">이전 기록</button>
     </div>
     <p class="note" id="modalRankPeriodNote">오늘 · 한국 시간 자정 기준</p>
     <div class="rank-panel" id="modalRankPanel" role="tabpanel" aria-labelledby="modalDailyTab" tabindex="0">

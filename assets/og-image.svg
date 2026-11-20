@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">FA 몸값 퀴즈</title>
+  <desc id="description">KBO FA 계약 총액 맞히기. 오늘의 도전, 한 판 10명, 최대 1000점.</desc>
+  <!-- Editable vector source. The deployed social preview uses og-image.png. -->
+  <rect width="1200" height="630" fill="#eef1ec"/>
+  <rect x="40" y="40" width="1120" height="550" rx="18" fill="#fff" stroke="#d5dbd3" stroke-width="2"/>
+  <g font-family="'Apple SD Gothic Neo','Noto Sans KR',sans-serif">
+    <text x="88" y="113" font-family="'SF Mono','IBM Plex Mono',monospace" font-size="23" font-weight="600" letter-spacing="3" fill="#b3122e">KBO FREE AGENT</text>
+    <text x="88" y="259" font-size="96" font-weight="700" letter-spacing="-3" fill="#1b2430">FA 몸값 <tspan fill="#b3122e">퀴즈</tspan></text>
+    <text x="92" y="329" font-size="34" font-weight="500" fill="#1b2430">KBO FA 계약 총액 맞히기</text>
+    <text x="88" y="486" font-size="27" font-weight="600" fill="#1b2430">오늘의 도전 · 한 판 10명 · 최대 1000점</text>
+    <text x="88" y="541" font-family="'SF Mono','IBM Plex Mono',monospace" font-size="22" fill="#5d6874">kbo-fa-quiz.vercel.app</text>
+  </g>
+  <path d="M88 415H1112" fill="none" stroke="#d5dbd3" stroke-width="2" stroke-dasharray="8 8"/>
+  <g fill="none" stroke="#b3122e" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M963 166h105l44 44v153H963z"/>
+    <path d="M1068 166v44h44"/>
+    <path d="M986 307h103M986 334h70"/>
+  </g>
+  <g fill="#b3122e">
+    <path d="M985 230h38v9h-28v11h24v9h-24v21h-10z"/>
+    <path d="M1050 230h11l20 50h-11l-4-11h-22l-4 11h-10zm-2.5 30h15l-7.5-20z" fill-rule="evenodd"/>
+  </g>
+</svg>
