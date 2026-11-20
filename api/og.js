@@ -1,8 +1,7 @@
 import { ImageResponse } from '@vercel/og';
 import { parseResult, resultMode } from './_result.js';
 
-export const config = { runtime: 'edge' };
-
+// Node 런타임에서 실행합니다(Edge 런타임에서는 렌더링 결과가 빈 PNG로 나왔습니다).
 const SITE = 'https://kbo-fa-quiz.vercel.app';
 const COLORS = { bg: '#141a17', card: '#1d2420', ink: '#e8ece6', muted: '#9aa59d', line: '#2f3833', accent: '#ff5a6e' };
 const GRADE_COLORS = { g: '#5fd08f', f: '#6aa8ff', w: '#ff9b50', b: '#ff5a6e' };
@@ -40,20 +39,29 @@ function card(result) {
   ]);
 }
 
-export default async function handler(request) {
+const fallback = reason => new Response(null, {
+  status: 302,
+  headers: { Location: `${SITE}/assets/og-image.png`, 'Cache-Control': 'no-store', 'x-og-error': reason.slice(0, 200) }
+});
+
+export async function GET(request) {
   const result = parseResult(new URL(request.url).searchParams);
-  if (!result) return Response.redirect(`${SITE}/assets/og-image.png`, 302);
+  if (!result) return fallback('invalid query');
   try {
     const text = `FA 몸값 퀴즈${resultMode(result)}${result.score}/ 1000점kbo-fa-quiz.vercel.app`;
     const font = await loadFont(text);
-    return new ImageResponse(card(result), {
+    // 스트리밍 도중 실패하면 빈 PNG가 캐시되므로, 끝까지 그린 뒤에 응답합니다.
+    const png = await new ImageResponse(card(result), {
       width: 1200, height: 630,
-      fonts: [{ name: 'Black Han Sans', data: font, weight: 400, style: 'normal' }],
-      headers: { 'Cache-Control': 'public, max-age=31536000, immutable' }
+      fonts: [{ name: 'Black Han Sans', data: font, weight: 400, style: 'normal' }]
+    }).arrayBuffer();
+    if (png.byteLength === 0) throw new Error('Empty image');
+    return new Response(png, {
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' }
     });
   } catch (error) {
-    // 폰트나 렌더링이 실패하면 기본 OG 이미지로 대신합니다.
+    // 폰트나 렌더링이 실패하면 기본 OG 이미지로 대신하고, 원인은 헤더와 로그에 남깁니다.
     console.error('og render failed', error);
-    return Response.redirect(`${SITE}/assets/og-image.png`, 302);
+    return fallback(String(error?.message ?? error));
   }
 }
