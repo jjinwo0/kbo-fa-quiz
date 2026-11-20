@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FA 몸값 퀴즈</title>
+<meta name="description" content="KBO FA 선수의 성적과 계약 기간을 보고 계약 총액을 맞혀 보세요. 한 판 10명, 최대 1000점!">
+<script>
+// 공개 클라이언트용 Project URL과 anon key를 입력하세요.
+// publishable key도 사용할 수 있습니다. service_role / secret key는 절대 넣지 마세요.
+const SUPABASE_URL = 'https://dessiafvmfongimertyh.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ucAoGAvHxNpjoySA07qmSQ_SGaPrB3a';
+</script>
+<script id="supabaseSdk" async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700&family=IBM+Plex+Mono:wght@500;700&display=swap">
+<style>
+/* 레이아웃: 대문(소개+랭킹) → 계약서 카드 한 장씩 → 결과 */
+:root {
+  --bg: #eef1ec; --card: #ffffff; --ink: #1b2430; --muted: #5d6874; --line: #d5dbd3;
+  --accent: #b3122e; --good: #1d7a46; --warn: #a86a00; --tint: #f6e7e9;
+  --display: "Black Han Sans", "Noto Sans KR", sans-serif;
+  --body: "Noto Sans KR", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141a17; --card: #1d2420; --ink: #e8ece6; --muted: #9aa59d; --line: #2f3833;
+  --accent: #ff5a6e; --good: #5fd08f; --warn: #f0b450; --tint: #3a2227; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141a17; --card: #1d2420; --ink: #e8ece6; --muted: #9aa59d; --line: #2f3833;
+  --accent: #ff5a6e; --good: #5fd08f; --warn: #f0b450; --tint: #3a2227; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; }
+.wrap { max-width: 560px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+section { display: grid; gap: 16px; }
+h1 { font-family: var(--display); font-weight: 400; margin: 0; letter-spacing: -0.5px; line-height: 1.05; }
+h1 span { color: var(--accent); }
+h2 { font-family: var(--display); font-weight: 400; font-size: 20px; margin: 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px; display: grid; gap: 16px; }
+button { font-family: var(--body); font-weight: 700; font-size: 15px; border: 0; border-radius: 6px; padding: 0 18px; min-height: 46px;
+  background: var(--accent); color: #fff; cursor: pointer; }
+button.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 0; }
+
+/* 대문 */
+.hero { display: grid; gap: 14px; padding-block: 12px 8px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 1.5px; color: var(--accent); margin: 0; }
+.hero h1 { font-size: clamp(44px, 13vw, 64px); }
+.lead { font-size: 17px; line-height: 1.6; margin: 0; max-width: 32em; }
+.ticket { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px dashed var(--muted); border-radius: 8px; }
+.ticket div { padding: 10px 12px; display: grid; gap: 2px; }
+.ticket div + div { border-left: 1px dashed var(--muted); }
+.ticket small { font-size: 11px; color: var(--muted); }
+.ticket b { font-family: var(--mono); font-size: 18px; font-variant-numeric: tabular-nums; }
+.hero button { justify-self: start; min-width: 180px; font-size: 17px; }
+.rank { list-style: none; margin: 0; padding: 0; display: grid; }
+.rank li { display: grid; grid-template-columns: 28px 1fr auto; align-items: center; gap: 10px; padding: 9px 4px; border-bottom: 1px dashed var(--line); }
+.rank li:last-child { border-bottom: 0; }
+.rank .no { font-family: var(--mono); font-weight: 700; color: var(--muted); }
+.rank li:nth-child(-n+3) .no { color: var(--accent); }
+.rank .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .pts { font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+.rank li.me { background: var(--tint); border-radius: 6px; }
+.mine { font-size: 13px; color: var(--muted); margin: 0; }
+
+/* 게임 */
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.topbar h1 { font-size: 22px; }
+.meta { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.who-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.name { font-family: var(--display); font-size: 32px; line-height: 1; }
+.pos { color: var(--muted); font-size: 13px; margin-top: 6px; }
+.year { font-family: var(--mono); font-weight: 700; font-size: 13px; border: 1.5px solid var(--accent); color: var(--accent);
+  padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+.terms { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.terms div { background: var(--card); padding: 10px 12px; }
+.terms small { display: block; font-size: 11px; color: var(--muted); letter-spacing: 0.5px; }
+.terms b { font-size: 16px; }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; }
+th { font-family: var(--body); font-size: 11px; color: var(--muted); font-weight: 400; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { text-align: right; padding: 8px; border-bottom: 1px dashed var(--line); }
+th:first-child, td:first-child { text-align: left; }
+tr:last-child td { border-bottom: 0; font-weight: 700; }
+form { display: flex; gap: 8px; }
+.field { flex: 1; min-width: 0; display: flex; align-items: center; border: 1.5px solid var(--ink); border-radius: 6px; padding: 0 12px; background: var(--card); }
+.field input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font-family: var(--mono); font-size: 20px; padding: 10px 0; outline: none; }
+.field:focus-within { border-color: var(--accent); }
+.field span { color: var(--muted); }
+.result { display: grid; gap: 8px; padding-top: 6px; border-top: 2px solid var(--ink); }
+.answer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.answer strong { font-family: var(--display); font-weight: 400; font-size: 36px; }
+.answer strong em { font-style: normal; color: var(--accent); }
+.answer span { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.verdict { font-weight: 700; }
+.src { font-size: 12px; color: var(--muted); justify-self: start; }
+.verdict.good { color: var(--good); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--accent); }
+
+/* 결과 */
+.final { text-align: left; }
+.final .big { font-family: var(--display); font-size: 64px; line-height: 1; }
+.final .big small { font-size: 22px; color: var(--muted); }
+.recap { list-style: none; margin: 0; padding: 0; display: grid; }
+.recap li { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+.recap li:last-child { border-bottom: 0; }
+.recap .num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.recap .num b { color: var(--ink); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.rank-dialog {
+  width: min(560px, calc(100% - 32px));
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+  margin: auto; padding: 24px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--card); color: var(--ink);
+  box-shadow: 0 20px 70px rgb(0 0 0 / .25);
+}
+.rank-dialog::backdrop { background: rgb(0 0 0 / .6); }
+.rank-dialog-content { display: grid; gap: 16px; }
+.rank-dialog-heading { display: grid; gap: 6px; }
+html.modal-open { overflow: hidden; }
+@media (prefers-reduced-motion: no-preference) {
+  .result, .final { animation: rise .25s ease-out; }
+  @keyframes rise { from { transform: translateY(6px); opacity: .4; } to { transform: none; opacity: 1; } }
+}
+
+/* 정적 페이지 기본값과 모바일 접근성. 원본 색상/서체/카드 구성 유지. */
+* { box-sizing: border-box; }
+:root { color-scheme: light; }
+body { margin: 0; font-size: 16px; }
+[hidden] { display: none !important; }
+section, .card { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+button:disabled { opacity: .55; cursor: default; }
+.wrap { max-width: 840px; padding-top: 36px; }
+.note { font-size: 14px; }
+.ticket small, .terms small, th { font-size: 13px; }
+.meta, .pos, .year { font-size: 15px; }
+.src { font-size: 14px; }
+button { min-height: 52px; font-size: 16px; }
+.hero h1 { font-size: clamp(52px, 13vw, 88px); }
+.lead { font-size: 18px; }
+.ticket b { font-size: 22px; }
+h2 { font-size: 24px; }
+.name { font-size: 40px; }
+.terms b { font-size: 18px; }
+table { font-size: 16px; }
+.answer strong { font-size: 42px; }
+.answer span { font-size: 15px; }
+.recap li { font-size: 16px; }
+.final .big { font-size: 80px; }
+@media (min-width: 640px) {
+  section { gap: 24px; }
+  .hero { gap: 20px; }
+  .card { padding: 28px; gap: 20px; }
+  .ticket div { padding: 16px; }
+  .hero button { min-width: 220px; font-size: 19px; }
+  .topbar h1 { font-size: 28px; }
+  .rank li { padding: 12px 4px; }
+  .terms div { padding: 14px 16px; }
+  th, td { padding: 10px; }
+  .field input { font-size: 24px; }
+}
+.register { display: grid; gap: 8px; }
+.register > label { font-size: 14px; font-weight: 700; }
+#nickname { font-family: var(--body); font-size: 16px; }
+.field input:disabled { opacity: .7; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.recap li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 420px) {
+  .card { padding: 16px; }
+  .rank-dialog { padding: 16px; }
+  th, td { padding-left: 4px; padding-right: 4px; }
+  table { font-size: 14px; }
+  .year { font-size: 13px; }
+  .name { font-size: 36px; }
+  .recap li { gap: 8px; font-size: 14px; }
+  .ticket div { padding: 10px; }
+}
+@media (max-width: 360px) {
+  .topbar { gap: 6px; flex-wrap: wrap; }
+  .who-row { gap: 8px; flex-wrap: wrap; }
+  .terms b { font-size: 14px; }
+  .recap li { grid-template-columns: 1fr auto; }
+  .recap li > span:first-child { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+<noscript>퀴즈를 플레이하려면 브라우저에서 JavaScript를 켜 주세요.</noscript>
+<div class="wrap">
+  <section id="home">
+    <div class="hero">
+      <p class="eyebrow">KBO FREE AGENT · 2013–2025</p>
+      <h1>FA 몸값<br><span>퀴즈</span></h1>
+      <p class="lead">직전 시즌 성적과 계약 기간만 보고, 구단이 얼마를 썼는지 맞혀 보세요.</p>
+      <div class="ticket">
+        <div><small>한 판</small><b>10명</b></div>
+        <div><small>문제당 최대</small><b>100점</b></div>
+        <div><small>출제 풀</small><b id="poolSize">0명</b></div>
+      </div>
+      <button id="startBtn" disabled>시작하기</button>
+      <p class="note" id="dataNote" role="status">문제를 불러오는 중입니다.</p>
+      <button id="retryDataBtn" class="ghost" hidden>다시 불러오기</button>
+      <p class="note">총액(보장+옵션, 억 원)을 맞힙니다. 문제당 점수는 100 − 오차율(%)이고, 최소 0점입니다.</p>
+    </div>
+    <div class="card">
+      <div class="topbar"><h2>랭킹 TOP 10</h2><span class="meta">한 판 최고 점수</span></div>
+      <ol class="rank" id="rank" aria-label="랭킹 TOP 10"></ol>
+      <p class="note" id="rankNote" role="status">랭킹을 불러오는 중입니다.</p>
+      <p class="mine" id="mine" hidden></p>
+    </div>
+  </section>
+
+  <section id="game" hidden>
+    <div class="topbar"><h1>FA 몸값 <span>퀴즈</span></h1><div class="meta" id="meta" aria-live="polite"></div></div>
+    <main class="card" id="card"></main>
+  </section>
+
+  <section id="done" hidden>
+    <div class="card final">
+      <p class="eyebrow">GAME SET</p>
+      <div class="big"><span id="finalScore">0</span><small> / 1000점</small></div>
+            <p class="note">내 답 / 정답 · 단위: 억 원</p>
+      <ol class="recap" id="recap"></ol>
+      <div class="register">
+        <label for="nickname">랭킹에 이름 남기기 <span class="note">1–12자</span></label>
+        <form id="scoreForm">
+          <label class="field"><input id="nickname" name="nickname" type="text" autocomplete="nickname" maxlength="24" placeholder="닉네임" aria-label="닉네임 1–12자" required></label>
+          <button id="saveBtn" type="submit">랭킹 등록</button>
+        </form>
+        <p id="saveMsg" class="note" role="status" aria-live="polite"></p>
+      </div>
+      <div class="actions">
+        <button id="againBtn">다시 하기</button>
+        <button id="homeBtn" class="ghost">홈으로</button>
+        <button id="rankBtn" class="ghost" aria-haspopup="dialog" aria-controls="rankDialog">랭킹 보기</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<dialog id="rankDialog" class="rank-dialog" aria-labelledby="rankDialogTitle" aria-describedby="rankDialogDescription">
+  <div class="rank-dialog-content">
+    <div class="topbar">
+      <div class="rank-dialog-heading">
+        <h2 id="rankDialogTitle">랭킹 TOP 10</h2>
+        <p id="rankDialogDescription" class="note">닉네임별 최고 점수</p>
+      </div>
+      <button id="closeRankBtn" class="ghost" type="button" autofocus>닫기</button>
+    </div>
+    <ol class="rank" id="modalRank" aria-label="랭킹 1위부터 10위"></ol>
+    <p class="note" id="modalRankNote" role="status">랭킹을 불러오는 중입니다.</p>
+  </div>
+</dialog>
+
+<script>
+'use strict';
+
+const ROUND = 10;
+const HEAD = { b: ['시즌', '타율', '홈런', '타점', 'OPS'], p: ['시즌', '승', '패', '세이브', '홀드', 'ERA'] };
+const NICKNAME_KEY = 'kbo-fa-quiz:nickname';
+const REQUEST_TIMEOUT = 8000;
+const $ = id => document.getElementById(id);
+const rate = value => value == null ? '-' : value.toFixed(3).replace(/^0/, '');
+const num = value => value == null ? '-' : value;
+const fmt = (type, row) => type === 'b'
+  ? [row[0], rate(row[1]), num(row[2]), num(row[3]), rate(row[4])]
+  : [row[0], num(row[1]), num(row[2]), num(row[3]), num(row[4]), row[5] == null ? '-' : row[5].toFixed(2)];
+const breakdown = player => player.guarantee == null ? '세부 내역 비공개'
+  : player.option ? `보장 ${player.guarantee}억 + 옵션 ${player.option}억` : `보장 ${player.guarantee}억 · 옵션 없음`;
+const score = (guess, answer) => Math.max(0, Math.round(100 - Math.abs(guess - answer) / answer * 100));
+const esc = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+const show = id => {
+  ['home', 'game', 'done'].forEach(section => { $(section).hidden = section !== id; });
+  window.scrollTo({ top: 0, behavior: 'instant' });
+};
+
+let PLAYERS = [];
+let deck = [], idx = 0, total = 0, log = [];
+let revealed = false, saved = false, saving = false, gameId = 0;
+let rememberedNickname = readNickname();
+let clientPromise = null, rankRequest = 0;
+
+function readNickname() {
+  try {
+    const nickname = localStorage.getItem(NICKNAME_KEY) || '';
+    return [...nickname].length <= 12 ? nickname : '';
+  } catch { return ''; }
+}
+
+function rememberNickname(nickname) {
+  rememberedNickname = nickname;
+  try { localStorage.setItem(NICKNAME_KEY, nickname); } catch { /* 저장 제한 환경에서도 플레이 가능 */ }
+}
+
+async function timedRequest(run) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  try { return await run(controller.signal); }
+  finally { clearTimeout(timer); }
+}
+
+async function loadPlayers() {
+  $('startBtn').disabled = true;
+  $('retryDataBtn').hidden = true;
+  $('dataNote').hidden = false;
+  $('dataNote').textContent = '문제를 불러오는 중입니다.';
+  try {
+    const players = await timedRequest(async signal => {
+      const response = await fetch('./players.json', { signal });
+      if (!response.ok) throw new Error('Player data unavailable');
+      return response.json();
+    });
+    // 값은 고치거나 보충하지 않습니다. 원본 파일의 문제를 그대로 사용합니다.
+    if (!Array.isArray(players) || players.length < ROUND || players.some(player =>
+      !player || !['b', 'p'].includes(player.type) || !Number.isFinite(player.amount) || player.amount <= 0 || !Array.isArray(player.stats)
+    )) throw new Error('Invalid player data');
+    PLAYERS = players;
+    $('poolSize').textContent = `${PLAYERS.length}명`;
+    $('dataNote').hidden = true;
+    $('startBtn').disabled = false;
+  } catch {
+    $('dataNote').textContent = '문제를 불러오지 못했습니다. 연결을 확인하고 다시 시도해 주세요.';
+    $('retryDataBtn').hidden = false;
+  }
+}
+
+function shuffle(players) {
+  const copy = [...players];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function start() {
+  if (PLAYERS.length < ROUND) return;
+  const seen = new Set();
+  // 같은 선수의 다른 연도 FA 계약도 한 판에서는 한 번만 출제합니다.
+  // 원본의 동명이인 최원준(투수/외야수)은 포지션으로 구분합니다.
+  deck = shuffle(PLAYERS).filter(player => {
+    const identity = `${player.name}\u0000${player.pos}`;
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  }).slice(0, ROUND);
+  idx = 0; total = 0; log = []; revealed = false;
+  saved = false; saving = false; gameId++;
+  show('game');
+  render();
+}
+
+function render() {
+  revealed = false;
+  $('meta').textContent = `${idx + 1} / ${deck.length} · ${total}점`;
+  const player = deck[idx];
+  const rows = player.stats.slice(-3).map(row => `<tr>${fmt(player.type, row).map(value => `<td>${esc(value)}</td>`).join('')}</tr>`).join('');
+  $('card').innerHTML = `
+    <div class="who-row">
+      <div><div class="name">${esc(player.name)}</div><div class="pos">${esc(player.pos)}</div></div>
+      <div class="year">${esc(player.year)} 시즌 후 FA</div>
+    </div>
+    <div class="terms">
+      <div><small>팀</small><b>${player.to === '잔류' ? `${esc(player.from)} 잔류` : `${esc(player.from)} → ${esc(player.to)}`}</b></div>
+      <div><small>계약 기간</small><b>${esc(player.term)}</b></div>
+    </div>
+    <div class="tbl"><table aria-label="FA 직전 시즌 성적"><thead><tr>${HEAD[player.type].map(heading => `<th scope="col">${heading}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+    <form id="guessForm">
+      <label class="field"><input id="guess" type="number" inputmode="decimal" min="0" step="any" placeholder="총액" aria-label="총액(억 원)" required><span>억</span></label>
+      <button type="submit">공개</button>
+    </form>
+    <div id="out" aria-live="polite"></div>`;
+  $('guessForm').addEventListener('submit', event => { event.preventDefault(); reveal(); });
+  $('guess').focus({ preventScroll: true });
+}
+
+function reveal() {
+  if (revealed) return;
+  const input = $('guess');
+  const guess = Number(input.value);
+  if (!input.reportValidity() || input.value.trim() === '' || !Number.isFinite(guess) || guess < 0) return;
+  revealed = true;
+  const player = deck[idx];
+  const points = score(guess, player.amount);
+  total += points;
+  log.push({ player, guess, points });
+  const [cls, message] = points >= 95 ? ['good', '정확합니다!'] : points >= 80 ? ['warn', '근접했습니다.'] : ['bad', '차이가 큽니다.'];
+  $('guessForm').hidden = true;
+  const last = idx === deck.length - 1;
+  $('out').innerHTML = `
+    <div class="result">
+      <div class="answer"><strong>${esc(player.term)} <em>${player.amount}억</em></strong><span>(${esc(breakdown(player))})</span></div>
+      <div>내 답 ${guess}억 · <span class="verdict ${cls}">${message} +${points}점</span></div>
+      <a class="src" id="sourceLink" target="_blank" rel="noopener noreferrer">계약 기사 보기 ↗</a>
+      <button id="next" type="button">${last ? '결과 보기' : '다음 선수'}</button>
+    </div>`;
+  // 원본 기사 URL을 그대로 사용하며, 브라우저 실행 스킴은 허용하지 않습니다.
+  const article = new URL(player.source);
+  if (['http:', 'https:'].includes(article.protocol)) $('sourceLink').href = player.source;
+  $('meta').textContent = `${idx + 1} / ${deck.length} · ${total}점`;
+  $('next').addEventListener('click', () => {
+    if (last) finish();
+    else { idx++; render(); }
+  }, { once: true });
+  $('next').focus({ preventScroll: true });
+}
+
+function finish() {
+  $('finalScore').textContent = total;
+  $('recap').innerHTML = log.map(({ player, guess, points }) =>
+    `<li><span>${esc(player.name)} <span class="num">${esc(player.year)}</span></span><span class="num">${guess} / <b>${player.amount}</b>억</span><span class="num"><b>${points}</b>점</span></li>`).join('');
+  $('nickname').value = rememberedNickname;
+  $('nickname').disabled = false;
+  $('nickname').setCustomValidity('');
+  $('saveBtn').disabled = false;
+  $('saveBtn').textContent = '랭킹 등록';
+  $('saveMsg').textContent = '닉네임을 입력해 이번 점수를 랭킹에 등록하세요.';
+  show('done');
+  $('nickname').focus({ preventScroll: true });
+}
+
+// ---- Supabase: 공개 키 + anon RLS. 게임 진행과 랭킹 요청은 독립적입니다. ----
+function getClient() {
+  if (clientPromise) return clientPromise;
+  clientPromise = (async () => {
+    if (SUPABASE_URL === 'YOUR_SUPABASE_URL' || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') throw new Error('Supabase not configured');
+    if (!window.supabase?.createClient) {
+      await new Promise((resolve, reject) => {
+        const script = $('supabaseSdk');
+        const cleanup = () => {
+          clearTimeout(timer);
+          script.removeEventListener('load', loaded);
+          script.removeEventListener('error', failed);
+        };
+        const loaded = () => { cleanup(); resolve(); };
+        const failed = () => { cleanup(); reject(new Error('Supabase SDK unavailable')); };
+        const timer = setTimeout(failed, REQUEST_TIMEOUT);
+        script.addEventListener('load', loaded, { once: true });
+        script.addEventListener('error', failed, { once: true });
+      });
+    }
+    return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+    });
+  })().catch(error => { clientPromise = null; throw error; });
+  return clientPromise;
+}
+
+async function loadRank() {
+  const request = ++rankRequest;
+  setRankNote('랭킹을 불러오는 중입니다.');
+  try {
+    const client = await getClient();
+    const { data, error } = await timedRequest(signal => client.from('leaderboard')
+      .select('id,nickname,score,created_at')
+      .order('score', { ascending: false })
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .limit(10).abortSignal(signal));
+    if (error || !Array.isArray(data)) throw error || new Error('Invalid ranking response');
+    if (request !== rankRequest) return;
+    renderRank(data);
+    setRankNote(data.length ? '' : '아직 기록이 없습니다. 첫 기록을 남겨 보세요.', data.length > 0);
+  } catch {
+    if (request !== rankRequest) return;
+    $('rank').replaceChildren();
+    $('modalRank').replaceChildren();
+    setRankNote('랭킹을 불러오지 못했습니다');
+  }
+}
+
+function setRankNote(message, hidden = false) {
+  for (const id of ['rankNote', 'modalRankNote']) {
+    $(id).textContent = message;
+    $(id).hidden = hidden;
+  }
+}
+
+function renderRank(rows) {
+  const createRows = () => rows.slice(0, 10).map((row, index) => {
+    const li = document.createElement('li');
+    if (row.nickname === rememberedNickname) li.className = 'me';
+    const position = document.createElement('span');
+    position.className = 'no'; position.textContent = index + 1;
+    const nickname = document.createElement('span');
+    nickname.className = 'who';
+    // 외부 입력은 HTML로 해석하지 않고 반드시 텍스트로 렌더링합니다.
+    nickname.textContent = row.nickname;
+    const points = document.createElement('span');
+    points.className = 'pts'; points.textContent = `${row.score}점`;
+    li.append(position, nickname, points);
+    return li;
+  });
+  $('rank').replaceChildren(...createRows());
+  $('modalRank').replaceChildren(...createRows());
+}
+
+function openRankDialog() {
+  if ($('rankDialog').open) return;
+  $('rankDialog').showModal();
+  document.documentElement.classList.add('modal-open');
+  loadRank();
+}
+
+function validateNickname() {
+  const nickname = $('nickname').value.trim();
+  const valid = [...nickname].length >= 1 && [...nickname].length <= 12;
+  $('nickname').setCustomValidity(valid ? '' : '닉네임을 1–12자로 입력해 주세요.');
+  return valid;
+}
+
+async function saveScore(event) {
+  event.preventDefault();
+  if (saving || saved || log.length !== ROUND) return;
+  if (!validateNickname()) { $('nickname').reportValidity(); return; }
+  const nickname = $('nickname').value.trim();
+  const session = gameId;
+  const submittedScore = total;
+  rememberNickname(nickname);
+  saving = true;
+  $('nickname').disabled = true;
+  $('saveBtn').disabled = true;
+  $('saveBtn').textContent = '등록 중…';
+  $('saveMsg').textContent = '기록을 등록하고 있습니다.';
+  try {
+    const client = await getClient();
+    const { error } = await timedRequest(signal => client.from('scores')
+      .insert({ nickname, score: submittedScore }).abortSignal(signal));
+    if (error) throw error;
+    if (session !== gameId) { loadRank(); return; }
+    saved = true;
+    $('saveBtn').textContent = '등록 완료';
+    $('saveMsg').textContent = `${nickname} 님의 ${submittedScore}점을 등록했습니다. 같은 닉네임은 최고 점수만 랭킹에 표시됩니다.`;
+    loadRank();
+  } catch {
+    if (session !== gameId) return;
+    $('nickname').disabled = false;
+    $('saveBtn').disabled = false;
+    $('saveBtn').textContent = '랭킹 등록';
+    $('saveMsg').textContent = '랭킹에 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  } finally {
+    if (session === gameId) saving = false;
+  }
+}
+
+$('startBtn').addEventListener('click', start);
+$('againBtn').addEventListener('click', start);
+$('retryDataBtn').addEventListener('click', loadPlayers);
+$('homeBtn').addEventListener('click', () => {
+  show('home');
+  loadRank();
+  $('startBtn').focus({ preventScroll: true });
+});
+$('rankBtn').addEventListener('click', openRankDialog);
+$('closeRankBtn').addEventListener('click', () => $('rankDialog').close());
+$('rankDialog').addEventListener('click', event => {
+  if (event.target !== $('rankDialog')) return;
+  const rect = $('rankDialog').getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+    $('rankDialog').close();
+  }
+});
+$('rankDialog').addEventListener('close', () => {
+  document.documentElement.classList.remove('modal-open');
+  $('rankBtn').focus({ preventScroll: true });
+});
+$('nickname').addEventListener('input', validateNickname);
+$('scoreForm').addEventListener('submit', saveScore);
+loadPlayers();
+loadRank();
+</script>
+</body>
+</html>
+
