@@ -147,6 +147,8 @@ form { display: flex; gap: 8px; }
 .game-controls { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .game-controls button { min-height: 40px; font-size: 14px; padding: 0 12px; }
 .mode-badge { color: var(--accent); font-size: 14px; font-weight: 700; }
+.timer { margin: 0; font-family: var(--mono); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.timer.urgent { color: var(--accent); }
 .notice { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
 .result-filter { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .result-filter input { width: 18px; height: 18px; accent-color: var(--accent); }
@@ -278,7 +280,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
         <button id="dailyBtn" disabled>오늘의 도전</button>
         <button id="startBtn" class="ghost" disabled>자유 연습</button>
       </div>
-      <p class="notice">오늘의 도전은 모두 같은 10문제입니다. 이 브라우저 계정의 첫 도전만 랭킹에 반영되며, 한국 시간 자정에 마감됩니다.</p>
+      <p class="notice">오늘의 도전은 모두 같은 10문제이며, 문항마다 10초 안에 답해야 합니다. 하루 첫 도전만 랭킹에 반영되며, 한국 시간 자정에 마감됩니다.</p>
       <p class="note" id="startNote" role="status" hidden></p>
       <p class="note" id="dataNote" role="status">문제를 불러오는 중입니다.</p>
       <button id="retryDataBtn" class="ghost" hidden>다시 불러오기</button>
@@ -396,6 +398,7 @@ let PLAYERS = [];
 let deck = [], idx = 0, total = 0, log = [];
 let revealed = false, saved = false, saving = false, gameId = 0;
 let mode = 'practice', attemptId = null, profileNickname = null;
+let deadline = null, timerId = null;
 let rememberedNickname = readNickname();
 let clientPromise = null, rankRequest = 0;
 let rankPeriod = 'daily', rankDay = kstDayKey();
@@ -553,20 +556,26 @@ function setStartNote(message) {
   $('startNote').hidden = !message;
 }
 
+// 오늘 시도를 불러오면서 현재 문항을 공개합니다. 문항 제한 시간은 이 호출 시점부터 서버가 셉니다.
+async function fetchDailyState() {
+  const client = await getClient();
+  const { data: { session } } = await client.auth.getSession();
+  if (!session) {
+    const { error } = await client.auth.signInAnonymously();
+    if (error) throw error;
+  }
+  const { data, error } = await timedRequest(signal => client.rpc('quiz_daily_start').abortSignal(signal));
+  if (error) throw error;
+  return data;
+}
+
 async function startDaily() {
   $('dailyBtn').disabled = true;
   setStartNote('오늘의 문제를 불러오는 중입니다.');
   try {
-    const client = await getClient();
-    const { data: { session } } = await client.auth.getSession();
-    if (!session) {
-      const { error } = await client.auth.signInAnonymously();
-      if (error) throw error;
-    }
-    const { data, error } = await timedRequest(signal => client.rpc('quiz_daily_start').abortSignal(signal));
-    if (error) throw error;
+    const state = await fetchDailyState();
     setStartNote('');
-    beginDaily(data);
+    beginDaily(state);
   } catch (error) {
     setStartNote(dailyError(error, '오늘의 도전을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'));
   } finally {
@@ -580,12 +589,53 @@ function beginDaily(state) {
   attemptId = state.attempt_id;
   profileNickname = state.nickname;
   if (profileNickname) rememberNickname(profileNickname);
-  deck = state.deck; idx = state.next_index; total = state.total;
-  log = state.answers.map(answer => ({ player: answer.player, guess: Number(answer.guess), points: answer.points }));
+  idx = state.next_index; total = state.total;
+  // 서버는 지금 문항만 공개합니다. 다음 문항은 '다음 선수'를 누를 때 받아 옵니다.
+  // ponytail: state.deck 경로는 time-limit.sql 적용 전 서버 호환용, 적용 후 삭제
+  deck = new Array(ROUND);
+  deck[idx] = state.current ?? state.deck?.[idx];
+  deadline = state.remaining_ms == null ? null : Date.now() + state.remaining_ms;
+  log = state.answers.map(answer => ({
+    player: answer.player, guess: Number(answer.guess), points: answer.points, timedOut: Boolean(answer.timed_out)
+  }));
   revealed = false; saved = state.published; saving = false; gameId++;
   if (state.completed) { finish(); return; }
   show('game');
   render();
+}
+
+async function nextDaily() {
+  const session = gameId;
+  $('next').disabled = true;
+  try {
+    const state = await fetchDailyState();
+    if (session === gameId) beginDaily(state);
+  } catch (error) {
+    if (session !== gameId) return;
+    $('next').disabled = false;
+    $('gameNote').textContent = dailyError(error, '다음 문제를 불러오지 못했습니다. 다시 눌러 주세요.');
+    $('gameNote').hidden = false;
+  }
+}
+
+function stopTimer() {
+  clearInterval(timerId);
+  timerId = null;
+}
+
+// 표시용 카운트다운입니다. 시간 초과 판정은 서버가 합니다.
+function startTimer() {
+  stopTimer();
+  if (mode !== 'daily' || deadline == null) { $('timer').hidden = true; return; }
+  const tick = () => {
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    $('timer').textContent = `남은 시간 ${left}초`;
+    $('timer').classList.toggle('urgent', left <= 3);
+    if (left === 0) { stopTimer(); reveal(true); }
+  };
+  $('timer').hidden = false;
+  timerId = setInterval(tick, 200);
+  tick();
 }
 
 async function answerDaily(guess) {
@@ -595,10 +645,11 @@ async function answerDaily(guess) {
   }).abortSignal(signal));
   if (error) throw error;
   const answer = data.answers[idx];
-  return { player: answer.player, points: answer.points, total: data.total };
+  return { player: answer.player, points: answer.points, timedOut: Boolean(answer.timed_out), total: data.total };
 }
 
 function goHome() {
+  stopTimer();
   gameId++;
   show('home');
   loadRank();
@@ -610,7 +661,7 @@ function render() {
   $('gameMode').textContent = mode === 'daily' ? '오늘의 도전' : '자유 연습';
   $('pauseBtn').textContent = mode === 'daily' ? '저장하고 홈으로' : '그만하고 홈으로';
   $('gameNote').hidden = true;
-  $('meta').textContent = `${idx + 1} / ${deck.length} · ${total}점`;
+  $('meta').textContent = `${idx + 1} / ${ROUND} · ${total}점`;
   const player = deck[idx];
   const rows = player.stats.slice(-3).map(row => `<tr>${fmt(player.type, row).map(value => `<td>${esc(value)}</td>`).join('')}</tr>`).join('');
   $('card').innerHTML = `
@@ -623,6 +674,7 @@ function render() {
       <div><small>계약 기간</small><b>${esc(player.term)}</b></div>
     </div>
     <div class="tbl"><table aria-label="FA 직전 시즌 성적"><thead><tr>${HEAD[player.type].map(heading => `<th scope="col">${heading}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="timer" id="timer" hidden></p>
     <form id="guessForm">
       <label class="field"><input id="guess" type="number" inputmode="decimal" min="0" step="any" placeholder="총액" aria-label="총액(억 원)" required><span>억</span></label>
       <button type="submit">공개</button>
@@ -630,14 +682,20 @@ function render() {
     <div id="out" aria-live="polite"></div>`;
   $('guessForm').addEventListener('submit', event => { event.preventDefault(); reveal(); });
   $('guess').focus({ preventScroll: true });
+  startTimer();
 }
 
-async function reveal() {
+// timedOut: 제한 시간이 끝나 자동 제출하는 경우입니다. 입력값이 없으면 0으로 제출합니다.
+async function reveal(timedOut = false) {
   if (revealed) return;
   const input = $('guess');
-  const guess = Number(input.value);
-  if (!input.reportValidity() || input.value.trim() === '' || !Number.isFinite(guess) || guess < 0) return;
+  const raw = input.value.trim();
+  let guess = Number(raw);
+  const invalid = raw === '' || !Number.isFinite(guess) || guess < 0;
+  if (timedOut) { if (invalid) guess = 0; }
+  else if (!input.reportValidity() || invalid) return;
   revealed = true;
+  stopTimer();
   let player, points;
   if (mode === 'daily') {
     const session = gameId;
@@ -646,7 +704,7 @@ async function reveal() {
     try {
       const result = await answerDaily(guess);
       if (session !== gameId) return;
-      ({ player, points } = result);
+      ({ player, points, timedOut } = result);
       total = result.total;
     } catch (error) {
       if (session !== gameId) return;
@@ -662,26 +720,28 @@ async function reveal() {
     total += points;
   }
   $('gameNote').hidden = true;
-  log.push({ player, guess, points });
+  $('timer').hidden = true;
+  log.push({ player, guess, points, timedOut });
   const cls = grade(points);
-  const message = GRADE_MESSAGES[cls];
+  const message = timedOut ? '시간 초과' : GRADE_MESSAGES[cls];
   $('guessForm').hidden = true;
-  const last = idx === deck.length - 1;
+  const last = idx === ROUND - 1;
   $('out').innerHTML = `
     <div class="result">
       <div class="answer"><strong>${esc(player.term)} <em>${player.amount}억</em></strong><span>(${esc(breakdown(player))})</span></div>
-      <div>내 답 ${guess}억 · <span class="verdict ${cls}">${message} +${points}점</span></div>
+      <div>${timedOut ? '제한 시간 안에 답하지 못했습니다' : `내 답 ${guess}억`} · <span class="verdict ${cls}">${message} +${points}점</span></div>
       <a class="src" id="sourceLink" target="_blank" rel="noopener noreferrer">계약 기사 보기 ↗</a>
       <button id="next" type="button">${last ? '결과 보기' : '다음 선수'}</button>
     </div>`;
   // 원본 기사 URL을 그대로 사용하며, 브라우저 실행 스킴은 허용하지 않습니다.
   const article = new URL(player.source);
   if (['http:', 'https:'].includes(article.protocol)) $('sourceLink').href = player.source;
-  $('meta').textContent = `${idx + 1} / ${deck.length} · ${total}점`;
+  $('meta').textContent = `${idx + 1} / ${ROUND} · ${total}점`;
   $('next').addEventListener('click', () => {
     if (last) finish();
+    else if (mode === 'daily') nextDaily();
     else { idx++; render(); }
-  }, { once: true });
+  });
   $('next').focus({ preventScroll: true });
 }
 
@@ -722,8 +782,9 @@ $('onlyWrong').addEventListener('change', applyRecapFilter);
 
 function finish() {
   $('finalScore').textContent = total;
-  $('recap').innerHTML = log.map(({ player, guess, points }, i) =>
-    `<tr data-points="${points}"><th scope="row"><span class="q">Q${i + 1}</span>${esc(player.name)}<small>${esc(player.year)}</small></th><td>${player.amount}억</td><td>${guess}억</td><td class="pts ${grade(points)}">${points}</td></tr>`).join('');
+  stopTimer();
+  $('recap').innerHTML = log.map(({ player, guess, points, timedOut }, i) =>
+    `<tr data-points="${points}"><th scope="row"><span class="q">Q${i + 1}</span>${esc(player.name)}<small>${esc(player.year)}</small></th><td>${player.amount}억</td><td>${timedOut ? '시간 초과' : `${guess}억`}</td><td class="pts ${grade(points)}">${points}</td></tr>`).join('');
   applyRecapFilter();
   $('shareMsg').hidden = true;
   const daily = mode === 'daily';
