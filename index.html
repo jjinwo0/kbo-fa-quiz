@@ -398,7 +398,7 @@ let PLAYERS = [];
 let deck = [], idx = 0, total = 0, log = [];
 let revealed = false, saved = false, saving = false, gameId = 0;
 let mode = 'practice', attemptId = null, profileNickname = null;
-let deadline = null, timerId = null;
+let deadline = null, timerId = null, challengeDate = null;
 let rememberedNickname = readNickname();
 let clientPromise = null, rankRequest = 0;
 let rankPeriod = 'daily', rankDay = kstDayKey();
@@ -590,6 +590,7 @@ function beginDaily(state) {
   profileNickname = state.nickname;
   if (profileNickname) rememberNickname(profileNickname);
   idx = state.next_index; total = state.total;
+  challengeDate = state.challenge_date;
   // 서버는 지금 문항만 공개합니다. 다음 문항은 '다음 선수'를 누를 때 받아 옵니다.
   // ponytail: state.deck 경로는 time-limit.sql 적용 전 서버 호환용, 적용 후 삭제
   deck = new Array(ROUND);
@@ -749,17 +750,39 @@ const GRADE_MESSAGES = { good: '정확합니다!', fair: '근접했습니다.', 
 const GRADE_SQUARES = { good: '🟩', fair: '🟦', warn: '🟧', bad: '🟥' };
 const grade = points => points >= 90 ? 'good' : points >= 60 ? 'fair' : points >= 30 ? 'warn' : 'bad';
 
+const GRADE_CODES = { good: 'g', fair: 'f', warn: 'w', bad: 'b' };
+
+// 공유 링크(/s)는 메신저 미리보기에 결과 이미지를 띄우고, 열면 첫 화면으로 이동합니다.
+function shareContent() {
+  const daily = mode === 'daily';
+  const grades = log.map(({ points }) => grade(points));
+  const params = new URLSearchParams({ s: total, g: grades.map(code => GRADE_CODES[code]).join(''), m: daily ? 'd' : 'p' });
+  if (daily) params.set('d', challengeDate || kstDayKey());
+  const squares = grades.map(code => GRADE_SQUARES[code]);
+  const [, month, day] = (challengeDate || kstDayKey()).split('-').map(Number);
+  const heading = daily ? `⚾ FA 몸값 퀴즈 · 오늘의 도전 (${month}월 ${day}일)` : '⚾ FA 몸값 퀴즈 · 자유 연습';
+  return [
+    heading,
+    `${total} / 1000점`,
+    '',
+    squares.slice(0, 5).join(''),
+    squares.slice(5).join(''),
+    '',
+    `https://kbo-fa-quiz.vercel.app/s?${params}`
+  ].join('\n');
+}
+
 async function shareResult() {
-  const url = 'https://kbo-fa-quiz.vercel.app/';
-  const text = `FA 몸값 퀴즈${mode === 'daily' ? ' 오늘의 도전' : ''} ${total} / 1000점\n${log.map(({ points }) => GRADE_SQUARES[grade(points)]).join('')}`;
+  // 주소를 문구 끝에 넣어 기기마다 순서가 달라지지 않게 합니다(share의 url 필드는 쓰지 않음).
+  const text = shareContent();
   $('shareMsg').hidden = false;
   try {
     if (navigator.share) {
-      await navigator.share({ title: 'FA 몸값 퀴즈', text, url });
+      await navigator.share({ title: 'FA 몸값 퀴즈', text });
       $('shareMsg').hidden = true;
       return;
     }
-    await navigator.clipboard.writeText(`${text}\n${url}`);
+    await navigator.clipboard.writeText(text);
     $('shareMsg').textContent = '결과를 클립보드에 복사했습니다.';
   } catch (error) {
     // 사용자가 공유 시트를 닫은 경우는 실패로 안내하지 않습니다.

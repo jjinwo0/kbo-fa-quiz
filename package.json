@@ -1,0 +1,9 @@
+{
+  "name": "kbo-fa-quiz",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@vercel/og": "0.8.6"
+  }
+}
