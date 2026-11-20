@@ -143,6 +143,11 @@ form { display: flex; gap: 8px; }
 .rank-dialog::backdrop { background: rgb(0 0 0 / .6); }
 .rank-dialog-content { display: grid; gap: 16px; }
 .rank-dialog-heading { display: grid; gap: 6px; }
+.rank-tabs { display: flex; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; }
+.rank-tabs button { flex: 1; min-width: 0; min-height: 44px; padding: 0 10px; background: transparent; color: var(--muted); font-size: 15px; }
+.rank-tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+.rank-panel { display: grid; gap: 12px; min-width: 0; }
+.rank-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 html.modal-open { overflow: hidden; }
 @media (prefers-reduced-motion: no-preference) {
   .result, .final { animation: rise .25s ease-out; }
@@ -258,10 +263,16 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
       <p class="note">총액(보장+옵션, 억 원)을 맞힙니다. 문제당 점수는 100 − 오차율(%)이고, 최소 0점입니다.</p>
     </div>
     <div class="card">
-      <div class="topbar"><h2>랭킹 TOP 10</h2><span class="meta">한 판 최고 점수</span></div>
-      <ol class="rank" id="rank" aria-label="랭킹 TOP 10"></ol>
-      <p class="note" id="rankNote" role="status">랭킹을 불러오는 중입니다.</p>
-      <p class="mine" id="mine" hidden></p>
+      <div class="topbar"><h2>랭킹 TOP 10</h2><span class="meta" id="rankMeta">오늘 최고 점수</span></div>
+      <div class="rank-tabs" role="tablist" aria-label="대문 랭킹 기간">
+        <button type="button" id="homeDailyTab" role="tab" data-rank-period="daily" aria-selected="true" aria-controls="homeRankPanel">일일 랭킹</button>
+        <button type="button" id="homeAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="homeRankPanel" tabindex="-1">전체 랭킹</button>
+      </div>
+      <p class="note" id="rankPeriodNote">오늘 · 한국 시간 자정 기준</p>
+      <div class="rank-panel" id="homeRankPanel" role="tabpanel" aria-labelledby="homeDailyTab" tabindex="0">
+        <ol class="rank" id="rank" aria-label="일일 랭킹 TOP 10"></ol>
+        <p class="note" id="rankNote" role="status">랭킹을 불러오는 중입니다.</p>
+      </div>
     </div>
   </section>
 
@@ -308,12 +319,19 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     <div class="topbar">
       <div class="rank-dialog-heading">
         <h2 id="rankDialogTitle">랭킹 TOP 10</h2>
-        <p id="rankDialogDescription" class="note">닉네임별 최고 점수</p>
+        <p id="rankDialogDescription" class="note">닉네임별 오늘 최고 점수</p>
       </div>
       <button id="closeRankBtn" class="ghost" type="button" autofocus>닫기</button>
     </div>
-    <ol class="rank" id="modalRank" aria-label="랭킹 1위부터 10위"></ol>
-    <p class="note" id="modalRankNote" role="status">랭킹을 불러오는 중입니다.</p>
+    <div class="rank-tabs" role="tablist" aria-label="모달 랭킹 기간">
+      <button type="button" id="modalDailyTab" role="tab" data-rank-period="daily" aria-selected="true" aria-controls="modalRankPanel">일일 랭킹</button>
+      <button type="button" id="modalAllTab" role="tab" data-rank-period="all" aria-selected="false" aria-controls="modalRankPanel" tabindex="-1">전체 랭킹</button>
+    </div>
+    <p class="note" id="modalRankPeriodNote">오늘 · 한국 시간 자정 기준</p>
+    <div class="rank-panel" id="modalRankPanel" role="tabpanel" aria-labelledby="modalDailyTab" tabindex="0">
+      <ol class="rank" id="modalRank" aria-label="일일 랭킹 1위부터 10위"></ol>
+      <p class="note" id="modalRankNote" role="status">랭킹을 불러오는 중입니다.</p>
+    </div>
   </div>
 </dialog>
 
@@ -344,6 +362,53 @@ let deck = [], idx = 0, total = 0, log = [];
 let revealed = false, saved = false, saving = false, gameId = 0;
 let rememberedNickname = readNickname();
 let clientPromise = null, rankRequest = 0;
+let rankPeriod = 'daily', rankDay = kstDayKey();
+
+function kstDayKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(date);
+}
+
+function syncRankControls() {
+  const daily = rankPeriod === 'daily';
+  document.querySelectorAll('[data-rank-period]').forEach(button => {
+    const selected = button.dataset.rankPeriod === rankPeriod;
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  $('homeRankPanel').setAttribute('aria-labelledby', daily ? 'homeDailyTab' : 'homeAllTab');
+  $('modalRankPanel').setAttribute('aria-labelledby', daily ? 'modalDailyTab' : 'modalAllTab');
+  $('rank').setAttribute('aria-label', `${daily ? '일일' : '전체'} 랭킹 TOP 10`);
+  $('modalRank').setAttribute('aria-label', `${daily ? '일일' : '전체'} 랭킹 1위부터 10위`);
+  $('rankMeta').textContent = daily ? '오늘 최고 점수' : '역대 최고 점수';
+  $('rankDialogDescription').textContent = daily ? '닉네임별 오늘 최고 점수' : '닉네임별 역대 최고 점수';
+  const date = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric' }).format(new Date());
+  const note = daily ? `${date} · 매일 자정 갱신 (한국 시간)` : '전체 기간 · 닉네임별 역대 최고 점수';
+  $('rankPeriodNote').textContent = note;
+  $('modalRankPeriodNote').textContent = note;
+}
+
+function selectRankPeriod(period) {
+  if (!['daily', 'all'].includes(period) || period === rankPeriod) return;
+  rankPeriod = period;
+  syncRankControls();
+  loadRank();
+}
+
+function refreshRankDay() {
+  if (rankPeriod === 'daily' && rankDay !== kstDayKey()) loadRank();
+}
+
+function scheduleRankMidnight() {
+  const day = 24 * 60 * 60 * 1000, offset = 9 * 60 * 60 * 1000;
+  const now = Date.now();
+  const nextMidnight = (Math.floor((now + offset) / day) + 1) * day - offset;
+  setTimeout(() => {
+    if (rankPeriod === 'daily') loadRank();
+    scheduleRankMidnight();
+  }, nextMidnight - now + 1000);
+}
 
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
 function syncThemeControls() {
@@ -534,10 +599,15 @@ function getClient() {
 
 async function loadRank() {
   const request = ++rankRequest;
+  const period = rankPeriod, day = kstDayKey();
+  rankDay = day;
+  syncRankControls();
+  $('rank').replaceChildren();
+  $('modalRank').replaceChildren();
   setRankNote('랭킹을 불러오는 중입니다.');
   try {
     const client = await getClient();
-    const { data, error } = await timedRequest(signal => client.from('leaderboard')
+    const { data, error } = await timedRequest(signal => client.from(period === 'daily' ? 'daily_leaderboard' : 'leaderboard')
       .select('id,nickname,score,created_at')
       .order('score', { ascending: false })
       .order('created_at', { ascending: true })
@@ -545,8 +615,10 @@ async function loadRank() {
       .limit(10).abortSignal(signal));
     if (error || !Array.isArray(data)) throw error || new Error('Invalid ranking response');
     if (request !== rankRequest) return;
+    if (period === 'daily' && day !== kstDayKey()) { loadRank(); return; }
     renderRank(data);
-    setRankNote(data.length ? '' : '아직 기록이 없습니다. 첫 기록을 남겨 보세요.', data.length > 0);
+    const empty = period === 'daily' ? '오늘 등록된 기록이 없습니다. 첫 기록을 남겨 보세요.' : '아직 기록이 없습니다. 첫 기록을 남겨 보세요.';
+    setRankNote(data.length ? '' : empty, data.length > 0);
   } catch {
     if (request !== rankRequest) return;
     $('rank').replaceChildren();
@@ -616,7 +688,7 @@ async function saveScore(event) {
     if (session !== gameId) { loadRank(); return; }
     saved = true;
     $('saveBtn').textContent = '등록 완료';
-    $('saveMsg').textContent = `${nickname} 님의 ${submittedScore}점을 등록했습니다. 같은 닉네임은 최고 점수만 랭킹에 표시됩니다.`;
+    $('saveMsg').textContent = `${nickname} 님의 ${submittedScore}점을 등록했습니다. 일일·전체 랭킹에 각 기간의 최고 점수가 반영됩니다.`;
     loadRank();
   } catch {
     if (session !== gameId) return;
@@ -652,6 +724,23 @@ $('rankDialog').addEventListener('close', () => {
 });
 $('nickname').addEventListener('input', validateNickname);
 $('scoreForm').addEventListener('submit', saveScore);
+document.querySelectorAll('[data-rank-period]').forEach(button => {
+  button.addEventListener('click', () => selectRankPeriod(button.dataset.rankPeriod));
+  button.addEventListener('keydown', event => {
+    const tabs = [...button.closest('[role="tablist"]').querySelectorAll('[role="tab"]')];
+    const index = tabs.indexOf(button);
+    const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length
+      : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+      : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null;
+    if (next == null) return;
+    event.preventDefault();
+    tabs[next].focus();
+    selectRankPeriod(tabs[next].dataset.rankPeriod);
+  });
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshRankDay(); });
+window.addEventListener('focus', refreshRankDay);
+scheduleRankMidnight();
 loadPlayers();
 loadRank();
 </script>
