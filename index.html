@@ -395,6 +395,7 @@ const show = id => {
 let PLAYERS = [];
 let deck = [], idx = 0, total = 0, log = [];
 let revealed = false, saved = false, saving = false, gameId = 0;
+let mode = 'practice', attemptId = null, profileNickname = null;
 let rememberedNickname = readNickname();
 let clientPromise = null, rankRequest = 0;
 let rankPeriod = 'daily', rankDay = kstDayKey();
@@ -417,9 +418,9 @@ function syncRankControls() {
   $('rank').setAttribute('aria-label', `${daily ? '일일' : '전체'} 랭킹 TOP 10`);
   $('modalRank').setAttribute('aria-label', `${daily ? '일일' : '전체'} 랭킹 1위부터 10위`);
   $('rankMeta').textContent = daily ? '오늘 최고 점수' : '역대 최고 점수';
-  $('rankDialogDescription').textContent = daily ? '닉네임별 오늘 최고 점수' : '닉네임별 역대 최고 점수';
+  $('rankDialogDescription').textContent = daily ? '오늘의 도전 점수' : '오늘의 도전 역대 최고 점수';
   const date = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric' }).format(new Date());
-  const note = daily ? `${date} · 매일 자정 갱신 (한국 시간)` : '전체 기간 · 닉네임별 역대 최고 점수';
+  const note = daily ? `${date} 오늘의 도전 · 매일 자정 갱신 (한국 시간)` : '전체 기간 · 닉네임별 오늘의 도전 최고 점수';
   $('rankPeriodNote').textContent = note;
   $('modalRankPeriodNote').textContent = note;
 }
@@ -532,12 +533,83 @@ function start() {
   }).slice(0, ROUND);
   idx = 0; total = 0; log = []; revealed = false;
   saved = false; saving = false; gameId++;
+  mode = 'practice'; attemptId = null;
   show('game');
   render();
 }
 
+// ---- 오늘의 도전: 출제·채점·등록을 모두 서버(RPC)가 처리합니다. ----
+const DAILY_ERRORS = {
+  QUIZ_ATTEMPT_EXPIRED: '자정이 지나 오늘의 도전이 마감되었습니다. 홈에서 새 도전을 시작해 주세요.',
+  QUIZ_RATE_LIMITED: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+  QUIZ_NICKNAME_TAKEN: '이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.',
+  QUIZ_NICKNAME_FIXED: '이 브라우저 계정은 이미 다른 닉네임으로 등록되어 있습니다.',
+  QUIZ_INVALID_NICKNAME: '사용할 수 없는 문자가 포함된 닉네임입니다.'
+};
+const dailyError = (error, fallback) => DAILY_ERRORS[error?.message] || fallback;
+
+function setStartNote(message) {
+  $('startNote').textContent = message;
+  $('startNote').hidden = !message;
+}
+
+async function startDaily() {
+  $('dailyBtn').disabled = true;
+  setStartNote('오늘의 문제를 불러오는 중입니다.');
+  try {
+    const client = await getClient();
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) {
+      const { error } = await client.auth.signInAnonymously();
+      if (error) throw error;
+    }
+    const { data, error } = await timedRequest(signal => client.rpc('quiz_daily_start').abortSignal(signal));
+    if (error) throw error;
+    setStartNote('');
+    beginDaily(data);
+  } catch (error) {
+    setStartNote(dailyError(error, '오늘의 도전을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'));
+  } finally {
+    $('dailyBtn').disabled = false;
+  }
+}
+
+// 서버 상태 그대로 복원합니다. 이미 푼 문항은 이어서, 다 풀었으면 결과 화면으로 갑니다.
+function beginDaily(state) {
+  mode = 'daily';
+  attemptId = state.attempt_id;
+  profileNickname = state.nickname;
+  if (profileNickname) rememberNickname(profileNickname);
+  deck = state.deck; idx = state.next_index; total = state.total;
+  log = state.answers.map(answer => ({ player: answer.player, guess: Number(answer.guess), points: answer.points }));
+  revealed = false; saved = state.published; saving = false; gameId++;
+  if (state.completed) { finish(); return; }
+  show('game');
+  render();
+}
+
+async function answerDaily(guess) {
+  const client = await getClient();
+  const { data, error } = await timedRequest(signal => client.rpc('quiz_daily_answer', {
+    p_attempt_id: attemptId, p_question_index: idx, p_guess: guess
+  }).abortSignal(signal));
+  if (error) throw error;
+  const answer = data.answers[idx];
+  return { player: answer.player, points: answer.points, total: data.total };
+}
+
+function goHome() {
+  gameId++;
+  show('home');
+  loadRank();
+  $('dailyBtn').focus({ preventScroll: true });
+}
+
 function render() {
   revealed = false;
+  $('gameMode').textContent = mode === 'daily' ? '오늘의 도전' : '자유 연습';
+  $('pauseBtn').textContent = mode === 'daily' ? '저장하고 홈으로' : '그만하고 홈으로';
+  $('gameNote').hidden = true;
   $('meta').textContent = `${idx + 1} / ${deck.length} · ${total}점`;
   const player = deck[idx];
   const rows = player.stats.slice(-3).map(row => `<tr>${fmt(player.type, row).map(value => `<td>${esc(value)}</td>`).join('')}</tr>`).join('');
@@ -560,15 +632,36 @@ function render() {
   $('guess').focus({ preventScroll: true });
 }
 
-function reveal() {
+async function reveal() {
   if (revealed) return;
   const input = $('guess');
   const guess = Number(input.value);
   if (!input.reportValidity() || input.value.trim() === '' || !Number.isFinite(guess) || guess < 0) return;
   revealed = true;
-  const player = deck[idx];
-  const points = score(guess, player.amount);
-  total += points;
+  let player, points;
+  if (mode === 'daily') {
+    const session = gameId;
+    const submit = $('guessForm').querySelector('button');
+    input.disabled = true; submit.disabled = true;
+    try {
+      const result = await answerDaily(guess);
+      if (session !== gameId) return;
+      ({ player, points } = result);
+      total = result.total;
+    } catch (error) {
+      if (session !== gameId) return;
+      revealed = false;
+      input.disabled = false; submit.disabled = false;
+      $('gameNote').textContent = dailyError(error, '채점하지 못했습니다. 연결을 확인하고 다시 공개해 주세요.');
+      $('gameNote').hidden = false;
+      return;
+    }
+  } else {
+    player = deck[idx];
+    points = score(guess, player.amount);
+    total += points;
+  }
+  $('gameNote').hidden = true;
   log.push({ player, guess, points });
   const cls = grade(points);
   const message = GRADE_MESSAGES[cls];
@@ -598,7 +691,7 @@ const grade = points => points >= 90 ? 'good' : points >= 60 ? 'fair' : points >
 
 async function shareResult() {
   const url = 'https://kbo-fa-quiz.vercel.app/';
-  const text = `FA 몸값 퀴즈 ${total} / 1000점\n${log.map(({ points }) => GRADE_SQUARES[grade(points)]).join('')}`;
+  const text = `FA 몸값 퀴즈${mode === 'daily' ? ' 오늘의 도전' : ''} ${total} / 1000점\n${log.map(({ points }) => GRADE_SQUARES[grade(points)]).join('')}`;
   $('shareMsg').hidden = false;
   try {
     if (navigator.share) {
@@ -633,14 +726,21 @@ function finish() {
     `<tr data-points="${points}"><th scope="row"><span class="q">Q${i + 1}</span>${esc(player.name)}<small>${esc(player.year)}</small></th><td>${player.amount}억</td><td>${guess}억</td><td class="pts ${grade(points)}">${points}</td></tr>`).join('');
   applyRecapFilter();
   $('shareMsg').hidden = true;
-  $('nickname').value = rememberedNickname;
-  $('nickname').disabled = false;
-  $('nickname').setCustomValidity('');
-  $('saveBtn').disabled = false;
-  $('saveBtn').textContent = '랭킹 등록';
-  $('saveMsg').textContent = '닉네임을 입력해 이번 점수를 랭킹에 등록하세요.';
+  const daily = mode === 'daily';
+  $('resultMode').textContent = daily ? '오늘의 도전 · GAME SET' : '자유 연습 · GAME SET';
+  $('registerCard').hidden = !daily;
+  $('practiceNote').hidden = daily;
+  if (daily) {
+    // 등록된 닉네임이 있으면 서버가 다른 이름을 거부하므로 입력을 고정합니다.
+    $('nickname').value = profileNickname || rememberedNickname;
+    $('nickname').disabled = saved || Boolean(profileNickname);
+    $('nickname').setCustomValidity('');
+    $('saveBtn').disabled = saved;
+    $('saveBtn').textContent = saved ? '등록 완료' : '랭킹 등록';
+    $('saveMsg').textContent = saved ? '오늘의 랭킹에 등록된 기록입니다.' : '닉네임을 입력해 오늘의 랭킹에 등록하세요.';
+  }
   show('done');
-  $('nickname').focus({ preventScroll: true });
+  if (daily && !saved) $(profileNickname ? 'saveBtn' : 'nickname').focus({ preventScroll: true });
 }
 
 // ---- Supabase: 공개 키 + anon RLS. 게임 진행과 랭킹 요청은 독립적입니다. ----
@@ -664,7 +764,8 @@ function getClient() {
       });
     }
     return window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+      // 오늘의 도전은 브라우저별 익명 계정 기준이므로 세션을 이 브라우저에 유지합니다.
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'kbo-fa-quiz:auth' }
     });
   })().catch(error => { clientPromise = null; throw error; });
   return clientPromise;
@@ -690,7 +791,7 @@ async function loadRank() {
     if (request !== rankRequest) return;
     if (period === 'daily' && day !== kstDayKey()) { loadRank(); return; }
     renderRank(data);
-    const empty = period === 'daily' ? '오늘 등록된 기록이 없습니다. 첫 기록을 남겨 보세요.' : '아직 기록이 없습니다. 첫 기록을 남겨 보세요.';
+    const empty = period === 'daily' ? '오늘 등록된 기록이 없습니다. 오늘의 도전으로 첫 기록을 남겨 보세요.' : '아직 기록이 없습니다. 오늘의 도전으로 첫 기록을 남겨 보세요.';
     setRankNote(data.length ? '' : empty, data.length > 0);
   } catch {
     if (request !== rankRequest) return;
@@ -742,12 +843,10 @@ function validateNickname() {
 
 async function saveScore(event) {
   event.preventDefault();
-  if (saving || saved || log.length !== ROUND) return;
+  if (mode !== 'daily' || saving || saved) return;
   if (!validateNickname()) { $('nickname').reportValidity(); return; }
   const nickname = $('nickname').value.trim();
   const session = gameId;
-  const submittedScore = total;
-  rememberNickname(nickname);
   saving = true;
   $('nickname').disabled = true;
   $('saveBtn').disabled = true;
@@ -755,33 +854,35 @@ async function saveScore(event) {
   $('saveMsg').textContent = '기록을 등록하고 있습니다.';
   try {
     const client = await getClient();
-    const { error } = await timedRequest(signal => client.from('scores')
-      .insert({ nickname, score: submittedScore }).abortSignal(signal));
+    const { data, error } = await timedRequest(signal => client.rpc('quiz_publish_score', {
+      p_attempt_id: attemptId, p_nickname: nickname
+    }).abortSignal(signal));
     if (error) throw error;
+    profileNickname = data.nickname;
+    rememberNickname(data.nickname);
     if (session !== gameId) { loadRank(); return; }
     saved = true;
     $('saveBtn').textContent = '등록 완료';
-    $('saveMsg').textContent = `${nickname} 님의 ${submittedScore}점을 등록했습니다. 일일·전체 랭킹에 각 기간의 최고 점수가 반영됩니다.`;
+    $('saveMsg').textContent = `${data.nickname} 님의 ${data.score}점을 오늘의 랭킹에 등록했습니다.`;
     loadRank();
-  } catch {
+  } catch (error) {
     if (session !== gameId) return;
-    $('nickname').disabled = false;
+    $('nickname').disabled = Boolean(profileNickname);
     $('saveBtn').disabled = false;
     $('saveBtn').textContent = '랭킹 등록';
-    $('saveMsg').textContent = '랭킹에 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    $('saveMsg').textContent = dailyError(error, '랭킹에 등록하지 못했습니다. 잠시 후 다시 시도해 주세요.');
   } finally {
     if (session === gameId) saving = false;
   }
 }
 
+$('dailyBtn').addEventListener('click', startDaily);
+$('dailyBtn').disabled = false;
 $('startBtn').addEventListener('click', start);
 $('againBtn').addEventListener('click', start);
 $('retryDataBtn').addEventListener('click', loadPlayers);
-$('homeBtn').addEventListener('click', () => {
-  show('home');
-  loadRank();
-  $('startBtn').focus({ preventScroll: true });
-});
+$('homeBtn').addEventListener('click', goHome);
+$('pauseBtn').addEventListener('click', goHome);
 $('rankBtn').addEventListener('click', openRankDialog);
 $('closeRankBtn').addEventListener('click', () => $('rankDialog').close());
 $('rankDialog').addEventListener('click', event => {
